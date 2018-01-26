@@ -143,7 +143,9 @@ class Downloader():
 
 class worker():
     def __init__(self,downloader,id):
+        #协程id
         self.id=id
+        #downloader对象
         self.downloader = downloader
         #每个协程的开始位置start，结束位置end，写入文件偏移量offset都在这个字典中
         self.workerinfo=self.downloader.download_info[self.id]
@@ -157,7 +159,6 @@ class worker():
         self.workers.append(self)
         #标记下载任务是否完成
         self.finish=False
-        #print "\n协程" + str(self.id) + "下载开始，开始位置:" + str(self.workerinfo["start"]) + "结束位置:" + str(self.workerinfo["end"])+ "偏移量:" + str(self.workerinfo["offset"])
 
     def process(self):
         req = urllib2.Request(self.url)
@@ -186,25 +187,19 @@ class worker():
                 if((self.workerinfo["offset"]-1)<self.workerinfo["end"]):
                     raise Exception("\n协程"+str(self.id)+"还没下完就提前结束了")
                 else:
-                    #print "\n协程"+str(self.id)+"下载结束，开始位置:"+str(self.workerinfo["start"])+"结束位置:"+str(self.workerinfo["end"])+"实际结束位置： "+str(self.workerinfo["offset"]-1)
                     self.finish=True
                     #从协程列表中退出
                     if self in self.workers:
                         self.workers.remove(self)
             except Exception, e:
-               # print e.message
                 #准备重连
                 gevent.sleep(3)
 
 
-
-
-
 if __name__ == "__main__":
     down=Downloader("http://download.jetbrains.8686c.com/cpp/CLion-2017.3.1.tar.gz",10)
-    #down=Downloader("http://haixi.sfkcn.com:8080/201508/books/junit_sz2_jb51.rar",10)
-    #down=Downloader("http://files.jb51.net/image/juejin.gif",1)
     down.download()
+
 
 
 
