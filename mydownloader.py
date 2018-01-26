@@ -95,7 +95,7 @@ class Downloader():
         # 开始用协程执行下载任务
         gevent.joinall(task)
 
-    #打印下载进度并记录下载请求到配置文件
+    #打印下载进度并记录下载情况到配置文件
     def momitor(self):
         #从字典中获取已下载量
         recode = self.download_info["record"]
