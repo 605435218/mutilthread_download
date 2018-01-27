@@ -159,6 +159,8 @@ class worker():
         self.workers.append(self)
         #标记下载任务是否完成
         self.finish=False
+        #每个协程有一个5M的缓存，缓存满了再写入硬盘，减少指针跳转次数
+        self.buffer=""
 
     def process(self):
         req = urllib2.Request(self.url)
@@ -180,10 +182,20 @@ class worker():
                     block = f.read(buffer)
                     if not block:
                         break
-                    self.file.seek(self.workerinfo["offset"])
-                    self.file.write(block)
-                    self.workerinfo["offset"] = self.workerinfo["offset"] + len(block)
+                    self.buffer+=block
+                    #缓存超过5M（5*1024*1024）时写入硬盘，然后清空缓存
+                    if len(self.buffer)>5242880:
+                        self.file.seek(self.workerinfo["offset"])
+                        self.file.write(self.buffer)
+                        self.workerinfo["offset"] = self.workerinfo["offset"] + len(self.buffer)
+                        self.buffer=""
                     self.speed+=len(block)
+                #下载结束时把缓存都写入硬盘
+                if len(self.buffer) > 0:
+                    self.file.seek(self.workerinfo["offset"])
+                    self.file.write(self.buffer)
+                    self.workerinfo["offset"] = self.workerinfo["offset"] + len(self.buffer)
+                    self.buffer = ""
                 if((self.workerinfo["offset"]-1)<self.workerinfo["end"]):
                     raise Exception("\n协程"+str(self.id)+"还没下完就提前结束了")
                 else:
@@ -194,6 +206,13 @@ class worker():
             except Exception, e:
                 #准备重连
                 gevent.sleep(3)
+            finally:
+                # 下载结束时把缓存都写入硬盘
+                if len(self.buffer) > 0:
+                    self.file.seek(self.workerinfo["offset"])
+                    self.file.write(self.buffer)
+                    self.workerinfo["offset"] = self.workerinfo["offset"] + len(self.buffer)
+                    self.buffer = ""
 
 
 if __name__ == "__main__":
