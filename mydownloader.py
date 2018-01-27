@@ -16,12 +16,13 @@ class Downloader():
     def getFilename(self):
         #断点续传时不再从配置文件获取文件名
         if os.path.exists("download_info1.pkl") and os.path.exists("download_info2.pkl"):
-            #选择用比较老的配置文件，防止写入文件时关闭程序造成数据写入不完全
-            if os.path.getmtime("download_info1.pkl")<os.path.getmtime("download_info2.pkl"):
-                f=open("download_info1.pkl", "rb")
-            else:
-                f=open("download_info2.pkl", "rb")
-            self.download_info = pickle.load(f)
+            #读取配置文件1异常时使用备用数据，防止写入文件时关闭程序造成数据写入不完全
+            try:
+                f = open("download_info1.pkl", "rb")
+                self.download_info = pickle.load(f)
+            except:
+                f = open("download_info2.pkl", "rb")
+                self.download_info = pickle.load(f)
             f.close()
             filename=self.download_info["filename"]
             return filename
@@ -70,7 +71,7 @@ class Downloader():
             for ran in self.get_range():
                 theworker = worker(self, str(id))
                 #重新计算已下载数据量
-                self.download_info["record"]+=self.download_info[str(id)]["offset"]-self.download_info[str(id)]["start"]+1
+                self.download_info["record"]+=self.download_info[str(id)]["offset"]-self.download_info[str(id)]["start"]
                 id += 1
                 task.append(gevent.spawn(theworker.process))
         #从头开始下载的情况
@@ -128,21 +129,16 @@ class Downloader():
                                       "剩余时间:未知"),
             #更新下载信息字典并存入文件中，断点续传时使用
             self.download_info["record"]=recode
+            # 串行方式写入两个配置文件，突然关闭程序时至少能保证一个文件已经被正常写入
             with open("download_info1.pkl", "wb") as f:
                 pickle.dump(self.download_info, f)
                 f.close()
-            #把两个配置文件的修改时间错开，方便挑选老的配置文件读取数据
-            gevent.sleep(1)
             with open("download_info2.pkl", "wb") as f:
                 pickle.dump(self.download_info, f)
                 f.close()
+            gevent.sleep(1)
+            
         #下载结束关闭文件流
-        print "\r%-40s%-40s%-40s%-40s%-40s%-40s" % ("文件大小：" + str(self.length / 1024) + " KB",
-                                                    "已下载:" + str(self.length / 1024) + " KB",
-                                                    "剩余：0 KB",
-                                                    "下载速度:0 KB/S",
-                                                    "完成率:100%",
-                                                    "剩余时间:0 S"),
         print "\n下载结束"
         #删掉配置信息文件
         os.remove("download_info1.pkl")
@@ -209,20 +205,22 @@ class worker():
                     raise Exception("\n协程"+self.id+"还没下完就提前结束了")
                 else:
                     self.finish=True
-                    #从协程列表中退出
-                    if self in self.workers:
-                        self.workers.remove(self)
+
             except Exception, e:
                 #准备重连
                 gevent.sleep(3)
             finally:
-                # 下载结束时把缓存都写入硬盘
+                # 确保缓存都写入硬盘
                 if len(self.buffer) > 0:
                     self.file.seek(self.workerinfo["offset"])
                     self.file.write(self.buffer)
                     self.workerinfo["offset"] = self.workerinfo["offset"] + len(self.buffer)
                     self.buffer = ""
-
+                #保证monitor能够把下载数据统计到再退出协程列表
+                gevent.sleep(1)
+                # 从协程列表中退出
+                if self in self.workers:
+                    self.workers.remove(self)
 
 if __name__ == "__main__":
     down=Downloader("http://download.jetbrains.8686c.com/cpp/CLion-2017.3.1.tar.gz",10)
