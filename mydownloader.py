@@ -65,9 +65,12 @@ class Downloader():
         if os.path.exists("download_info1.pkl") and os.path.exists("download_info2.pkl") and os.path.exists(filename):
             #rb+模式打开文件时不会清掉已下载数据，并能随机读写文件
             self.file = open(filename, 'rb+')
+            # 根据实际情况重置一下record字段,引入存储缓存后可能造成显示下载剩余为负的情况，目前还不知道怎么在退出时将缓存数据写入文件
+            self.download_info["record"] = 0
             for ran in self.get_range():
-                start, end = ran
                 theworker = worker(self, str(id))
+                #重新计算已下载数据量
+                self.download_info["record"]+=self.download_info[str(id)]["offset"]-self.download_info[str(id)]["start"]+1
                 id += 1
                 task.append(gevent.spawn(theworker.process))
         #从头开始下载的情况
@@ -134,6 +137,12 @@ class Downloader():
                 pickle.dump(self.download_info, f)
                 f.close()
         #下载结束关闭文件流
+        print "\r%-40s%-40s%-40s%-40s%-40s%-40s" % ("文件大小：" + str(self.length / 1024) + " KB",
+                                                    "已下载:" + str(self.length / 1024) + " KB",
+                                                    "剩余：0 KB",
+                                                    "下载速度:0 KB/S",
+                                                    "完成率:100%",
+                                                    "剩余时间:0 S"),
         print "\n下载结束"
         #删掉配置信息文件
         os.remove("download_info1.pkl")
@@ -197,7 +206,7 @@ class worker():
                     self.workerinfo["offset"] = self.workerinfo["offset"] + len(self.buffer)
                     self.buffer = ""
                 if((self.workerinfo["offset"]-1)<self.workerinfo["end"]):
-                    raise Exception("\n协程"+str(self.id)+"还没下完就提前结束了")
+                    raise Exception("\n协程"+self.id+"还没下完就提前结束了")
                 else:
                     self.finish=True
                     #从协程列表中退出
